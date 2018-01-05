@@ -77,7 +77,20 @@ class SelectorBIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        min_bic_score = None
+        min_model = None
+        try:
+            for n_components in range(self.min_n_components, self.max_n_components + 1):
+                model = self.base_model(n_components)
+                logL = model.score(self.X, self.lengths)
+                bic_score = -2 * logL + (n_components*(n_components-1) + 2*len(self.X[0])*n_components)*np.log(len(self.X))
+                if min_bic_score == None or min_bic_score > bic_score:
+                    min_bic_score = bic_score
+                    min_model = model
+            return min_model
+
+        except:
+            return min_model
 
 
 class SelectorDIC(ModelSelector):
@@ -94,7 +107,28 @@ class SelectorDIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        max_dic = None
+        for n_components in range(self.min_n_components, self.max_n_components + 1):
+            logL = {}
+            valid_words = []
+            for trained in (self.words).keys():
+                X_train, lengths_train = self.hwords[trained]
+                try:
+                    # Find suitable model
+                    model = GaussianHMM(n_components, covariance_type="diag", n_iter=1000,random_state=self.random_state, verbose=False).fit(X_train, lengths_train)
+                    # Calculate log probability for the model
+                    logL[trained] = model.score(X_train, lengths_train)
+                    valid_words.append(trained)
+                except ValueError:
+                    pass
+            try:  # Calculate DIC 
+                DIC = logL[self.this_word] - (1 / (len(valid_words) - 1)) * sum([logL[valid] for valid in valid_words if valid != self.this_word])  # Find max DIC score and best model
+                if max_dic==None or DIC > max_dic:
+                    max_dic = DIC
+                    best_model = model
+            except KeyError:
+                    best_model = model
+        return best_model
 
 
 class SelectorCV(ModelSelector):
@@ -106,4 +140,40 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection using CV
-        raise NotImplementedError
+        kf_no = min(3, len(self.sequences))
+        max_avg = None
+        i_best = -1
+        hmm_best = None
+        if kf_no==1:
+            for n in range(self.min_n_components, self.max_n_components + 1):
+                model = self.base_model(n)
+                try:
+                    score = model.score(self.X,self.lengths)
+                    if max_avg==None or score > max_avg:
+                        hmm_best = model
+                except:
+                    pass
+        else:
+            split_method = KFold(kf_no)
+
+            for n in range(self.min_n_components,self.max_n_components+1):
+                try:
+                    sum_logl = 0
+                    model = None
+                    length = 0
+                    for cv_train_idx,cv_test_idx in split_method.split(self.sequences):
+                        X_train,lengths_train = combine_sequences(cv_train_idx,self.sequences)
+                        X_test, lengths_test = combine_sequences(cv_test_idx, self.sequences)
+                        model = GaussianHMM(n, covariance_type="diag", n_iter=1000,random_state=self.random_state, verbose=False).fit(X_train, lengths_train)
+                        score = model.score(X_test, lengths_test)
+                        sum_logl = sum_logl + score
+                        length = length+1
+
+                    avg_score = sum_logl/length
+                    if max_avg==None or avg_score > max_avg:
+                        max_avg = avg_score
+                        hmm_best = model
+                except:
+                    pass
+
+        return hmm_best
