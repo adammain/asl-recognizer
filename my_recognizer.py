@@ -4,7 +4,6 @@ from asl_data import SinglesData
 
 def recognize(models: dict, test_set: SinglesData):
     """ Recognize test word sequences from word models set
-
    :param models: dict of trained models
        {'SOMEWORD': GaussianHMM model object, 'SOMEOTHERWORD': GaussianHMM model object, ...}
    :param test_set: SinglesData object
@@ -18,8 +17,27 @@ def recognize(models: dict, test_set: SinglesData):
            ['WORDGUESS0', 'WORDGUESS1', 'WORDGUESS2',...]
    """
     warnings.filterwarnings("ignore", category=DeprecationWarning)
+    # TODO implement the recognizer
     probabilities = []
     guesses = []
-    # TODO implement the recognizer
-    # return probabilities, guesses
-    raise NotImplementedError
+    all_Xlength = test_set.get_all_Xlengths()
+    for sequence in test_set.get_all_sequences():
+        best_pred = ""
+        top_score = float("-inf")
+        prob = {}
+        X, lengths = all_Xlength[sequence]
+        for word, model in models.items():
+            try:
+                logL_score = model.score(X, lengths)
+            except:
+                logL_score = float("-inf")
+
+            prob[word] = logL_score
+            if logL_score > top_score:
+                top_score = logL_score
+                best_pred = word
+
+        probabilities.append(prob)
+        guesses.append(best_pred)
+
+    return probabilities, guesses
