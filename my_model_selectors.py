@@ -105,29 +105,24 @@ class SelectorDIC(ModelSelector):
 
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-
         # TODO implement model selection based on DIC scores
-        max_dic = None
-        for n_components in range(self.min_n_components, self.max_n_components + 1):
-            logL = {}
-            valid_words = []
-            for trained in (self.words).keys():
-                X_train, lengths_train = self.hwords[trained]
-                try:
-                    # Find suitable model
-                    model = GaussianHMM(n_components, covariance_type="diag", n_iter=1000,random_state=self.random_state, verbose=False).fit(X_train, lengths_train)
-                    # Calculate log probability for the model
-                    logL[trained] = model.score(X_train, lengths_train)
-                    valid_words.append(trained)
-                except ValueError:
-                    pass
-            try:  # Calculate DIC 
-                DIC = logL[self.this_word] - (1 / (len(valid_words) - 1)) * sum([logL[valid] for valid in valid_words if valid != self.this_word])  # Find max DIC score and best model
-                if max_dic==None or DIC > max_dic:
-                    max_dic = DIC
+        min_val = float("-inf")
+        best_model = None
+        for n in range(self.min_n_components, self.max_n_components+1):
+            try:
+                model = self.base_model(n)
+                logL = model.score(self.X, self.lengths)
+                total_other_logL = 0
+                for word in self.words:
+                    other_x, other_lengths = self.hwords[word]
+                    total_other_logL += model.score(other_x, other_lengths)
+                avg_logL = total_other_logL/(len(self.words)-1)
+                dic_score = logL - avg_logL
+                if dic_score > min_val:
+                    min_val = dic_score
                     best_model = model
-            except KeyError:
-                    best_model = model
+            except:
+                continue
         return best_model
 
 
